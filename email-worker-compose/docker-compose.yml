@@ -1,0 +1,65 @@
+version: '3'
+volumes:
+  dados:
+networks:
+  banco:
+  web:
+  queue:
+services:
+  db:
+    image: postgres:9.6
+    volumes:
+      # Volume dos dados
+      - dados:/var/lib/postgresql/data
+      # Scripts
+      - ./scripts:/scripts
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - banco
+  frontend:
+    image: nginx:1.13
+    volumes:
+      # Site
+      - ./web:/usr/share/nginx/html/
+      # Configuração do proxy reverso
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    ports:
+      - 80:80
+    networks:
+      - web
+    depends_on:
+      - app
+  app:
+    image: python:3.6
+    volumes:
+      # Aplicação
+      - ./app:/app
+    working_dir: /app
+    command: bash ./app.sh
+    networks:
+      - banco
+      - web
+      - queue
+    depends_on:
+      - db
+      - queue
+    environment:
+      - REDIS_HOST=queue
+      - REDIS_PORT=6379
+      - DB_NAME=email_sender
+      - DB_USER=postgres
+      - DB_HOST=db
+  queue:
+    image: redis:3.2
+    networks:
+      - fila
+  worker:
+    build: worker
+    volumes:
+      - ./worker:./worker
+    working_dir: /worker
+    command: worker.py
+    networks: 
+      - queue
+    depends_on: 
+      - queue
